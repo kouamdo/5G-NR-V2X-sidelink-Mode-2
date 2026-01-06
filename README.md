@@ -24,3 +24,31 @@ This is a minimal working prototype for **5G NR V2X sidelink Mode 2** link abstr
 
 # Degraded run (more interesting losses)
 ./ns3 run "nr-v2x-west-to-east-highway --simTime=100 --numVehiclesPerLane=1 --numLanes=2 --interVehicleDist=120 --txPower=5 --logging=true"
+
+```
+
+### 2. Export traces to CSV
+
+Export packet events (pktTxRx) and SINR proxy (pscchRxUePhy) + compute PDR/abstraction-ready format:
+```bash
+# Export raw tables
+sqlite3 default-nr-v2x-west-to-east-highway.db \
+  "SELECT * FROM pktTxRx ORDER BY timeSec;" > pktTxRx.csv
+
+sqlite3 default-nr-v2x-west-to-east-highway.db \
+  "SELECT timeMs/1000.0 AS timeSec, txRnti, rnti, avrgSinr, minSinr, corrupt, tbler FROM pscchRxUePhy ORDER BY timeMs;" > pscchRxUePhy.csv
+
+# Process to final CSV (PDR, approx SINR dB, rolling window)
+python3 export_v2x.py --pkt_csv=pktTxRx.csv --sinr_csv=pscchRxUePhy.csv --output traces/v2x_pdr_traces.csv
+
+```
+
+### 3. Link Abstraction
+
+Input: CSV with sinr_db column
+Output: same CSV + success column (1 = delivered, 0 = lost)
+Uses reproducible random seed + clipping to avoid numerical issues.
+
+
+```bash
+python3 link_abstraction.py --csv traces/v2x_pdr_traces.csv --mcs 14 --out traces/losses.csv
